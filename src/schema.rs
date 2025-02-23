@@ -1,4 +1,4 @@
-use async_graphql::{SimpleObject, Object, EmptyMutation, EmptySubscription, Schema};
+use async_graphql::{EmptyMutation, EmptySubscription, InputObject, Object, Schema, SimpleObject};
 
 #[derive(SimpleObject)]
 pub struct User {
@@ -7,33 +7,48 @@ pub struct User {
     pub email: String,
 }
 
-pub struct QueryRoot;
+#[derive(InputObject)]
+pub struct UserSearchInput {
+    pub name: Option<String>,
+    pub email: Option<String>,
+}
 
-#[Object]
-impl QueryRoot {
-    async fn user(&self) -> User {
+fn get_users() -> Vec<User> {
+    vec![
         User {
             id: 1,
             name: "Farid".to_string(),
             email: "farid@example.com".to_string(),
+        },
+        User {
+            id: 2,
+            name: "Bob".to_string(),
+            email: "bob@example.com".to_string(),
         }
+    ]
+}
+
+pub struct QueryRoot;
+
+#[Object]
+impl QueryRoot {
+
+    async fn all_users(&self) -> Vec<User> {
+        get_users()
     }
 
-    async fn user_by_id(&self, id: i32) -> User {
-        if id == 1 {
-            User {
-                id: 1,
-                name: "Farid".to_string(),
-                email: "farid@example.com".to_string(),
-            }
-        }
-        else {
-            User {
-                id: 0,
-                name: "".to_string(),
-                email: "".to_string()
-            }
-        }
+    async fn user_by_id(&self, id: i32) -> Option<User> {
+        get_users().into_iter().find(|user| user.id == id)
+    }
+
+    async fn search_users(&self, input: UserSearchInput) -> Vec<User> {
+        get_users()
+        .into_iter()
+        .filter(|user| {
+            input.name.as_ref().map_or(true, |n| user.name.contains(n)) &&
+            input.email.as_ref().map_or(true, |e| user.email.contains(e))
+        })
+        .collect()
     }
 }
 
