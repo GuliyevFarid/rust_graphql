@@ -5,12 +5,14 @@ pub struct User {
     pub id: i32,
     pub name: String,
     pub email: String,
+    pub age: u8,
 }
 
 #[derive(InputObject)]
 pub struct UserSearchInput {
     pub name: Option<String>,
     pub email: Option<String>,
+    pub age: Option<u8>,
 }
 
 fn get_users() -> Vec<User> {
@@ -19,11 +21,13 @@ fn get_users() -> Vec<User> {
             id: 1,
             name: "Farid".to_string(),
             email: "farid@example.com".to_string(),
+            age: 20,
         },
         User {
             id: 2,
             name: "Bob".to_string(),
             email: "bob@example.com".to_string(),
+            age: 17,
         }
     ]
 }
@@ -45,8 +49,9 @@ impl QueryRoot {
         get_users()
         .into_iter()
         .filter(|user| {
-            input.name.as_ref().map_or(true, |n| user.name.contains(n)) &&
-            input.email.as_ref().map_or(true, |e| user.email.contains(e))
+            input.name.as_ref().map_or(true, |n| user.name.to_lowercase().contains(&n.to_lowercase())) &&
+            input.email.as_ref().map_or(true, |e| user.email.to_lowercase().contains(&e.to_lowercase())) &&
+            input.age.as_ref().map_or(true, |a| user.age >= *a)
         })
         .collect()
     }
