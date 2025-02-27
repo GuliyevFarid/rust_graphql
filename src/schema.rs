@@ -1,6 +1,8 @@
-use async_graphql::{EmptyMutation, EmptySubscription, InputObject, Object, Schema, SimpleObject};
+use async_graphql::{EmptySubscription, InputObject, Object, Schema, SimpleObject};
+use std::sync::Mutex;
+use lazy_static::lazy_static;
 
-#[derive(SimpleObject)]
+#[derive(SimpleObject, Clone)]
 pub struct User {
     pub id: i32,
     pub name: String,
@@ -15,21 +17,15 @@ pub struct UserSearchInput {
     pub age: Option<u8>,
 }
 
-fn get_users() -> Vec<User> {
-    vec![
-        User {
-            id: 1,
-            name: "Farid".to_string(),
-            email: "farid@example.com".to_string(),
-            age: 20,
-        },
-        User {
-            id: 2,
-            name: "Bob".to_string(),
-            email: "bob@example.com".to_string(),
-            age: 17,
-        }
-    ]
+#[derive(InputObject)]
+pub struct UserCreateInput {
+    pub name: String,
+    pub email: String,
+    pub age: u8,
+}
+
+lazy_static! {
+    static ref USERS: Mutex<Vec<User>> = Mutex::new(Vec::new());
 }
 
 pub struct QueryRoot;
@@ -38,15 +34,18 @@ pub struct QueryRoot;
 impl QueryRoot {
 
     async fn all_users(&self) -> Vec<User> {
-        get_users()
+        let users = USERS.lock().unwrap();
+        users.to_vec()
     }
 
     async fn user_by_id(&self, id: i32) -> Option<User> {
-        get_users().into_iter().find(|user| user.id == id)
+        let users = USERS.lock().unwrap();
+        users.to_vec().into_iter().find(|user| user.id == id)
     }
 
     async fn search_users(&self, input: UserSearchInput) -> Vec<User> {
-        get_users()
+        let users = USERS.lock().unwrap();
+        users.to_vec()
         .into_iter()
         .filter(|user| {
             input.name.as_ref().map_or(true, |n| user.name.to_lowercase().contains(&n.to_lowercase())) &&
@@ -57,8 +56,51 @@ impl QueryRoot {
     }
 }
 
-pub type MySchema = Schema<QueryRoot, EmptyMutation, EmptySubscription>;
+pub struct MutationRoot;
+
+#[Object]
+impl MutationRoot {
+    async fn create_user(&self, input: UserCreateInput) -> User {
+        let mut users = USERS.lock().unwrap();
+        let id = (users.len() as i32) + 1;
+        let user = User {
+            id,
+            name: input.name,
+            email: input.email,
+            age: input.age,
+        };
+        users.push(user.clone());
+        user
+    }
+
+    async fn update_user(&self, id: i32, name: Option<String>, 
+        email: Option<String>, age: Option<u8>) -> Option<User> {
+        let mut users = USERS.lock().unwrap();
+        if let Some(user) = users.iter_mut().find(|user| user.id == id) {
+            if let Some(new_name) = name {
+                user.name = new_name;
+            }
+            if let Some(new_email) = email {
+                user.email = new_email;
+            }
+            if let Some(new_age) = age {
+                user.age = new_age;
+            }
+            return Some(user.clone());
+        }
+        None
+    }
+
+    async fn delete_user(&self, id: i32) -> bool {
+        let mut users = USERS.lock().unwrap();
+        let original_len = users.len();
+        users.retain(|user| user.id != id);
+        users.len() < original_len
+    }
+}
+
+pub type MySchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 
 pub fn create_schema() -> MySchema {
-    Schema::build(QueryRoot, EmptyMutation, EmptySubscription).finish()
+    Schema::build(QueryRoot, MutationRoot, EmptySubscription).finish()
 }

@@ -895,6 +895,7 @@ dependencies = [
  "actix-web",
  "async-graphql",
  "async-graphql-actix-web",
+ "lazy_static",
  "serde",
  "tokio",
 ]
