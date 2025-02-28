@@ -1,4 +1,4 @@
-use async_graphql::{EmptySubscription, InputObject, Object, Schema, SimpleObject};
+use async_graphql::{EmptySubscription, Error, ErrorExtensions, InputObject, Object, Schema, SimpleObject};
 use std::sync::Mutex;
 use lazy_static::lazy_static;
 
@@ -74,7 +74,7 @@ impl MutationRoot {
     }
 
     async fn update_user(&self, id: i32, name: Option<String>, 
-        email: Option<String>, age: Option<u8>) -> Option<User> {
+        email: Option<String>, age: Option<u8>) -> Result<User, Error> {
         let mut users = USERS.lock().unwrap();
         if let Some(user) = users.iter_mut().find(|user| user.id == id) {
             if let Some(new_name) = name {
@@ -86,9 +86,10 @@ impl MutationRoot {
             if let Some(new_age) = age {
                 user.age = new_age;
             }
-            return Some(user.clone());
+            return Ok(user.clone());
         }
-        None
+
+        Err(Error::new("User not found").extend_with(|_, e| e.set("id", id)))
     }
 
     async fn delete_user(&self, id: i32) -> bool {
@@ -96,6 +97,12 @@ impl MutationRoot {
         let original_len = users.len();
         users.retain(|user| user.id != id);
         users.len() < original_len
+    }
+
+    async fn reset_users(&self) -> bool {
+        let mut users = USERS.lock().unwrap();
+        users.clear();
+        true
     }
 }
 
