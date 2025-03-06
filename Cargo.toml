@@ -10,3 +10,5 @@ async-graphql-actix-web = "7"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 lazy_static = "1.5.0"
+sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-native-tls", "migrate"] }
+dotenvy = "0.15"

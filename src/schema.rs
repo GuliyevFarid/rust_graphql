@@ -1,6 +1,11 @@
-use async_graphql::{EmptySubscription, Error, ErrorExtensions, InputObject, Object, Schema, SimpleObject};
-use std::sync::Mutex;
+use crate::models::DBUser;
+use async_graphql::{
+    Context, EmptySubscription, Error, ErrorExtensions, 
+    InputObject, Object, Schema, SimpleObject
+};
 use lazy_static::lazy_static;
+use sqlx::PgPool;
+use std::sync::Mutex;
 
 #[derive(SimpleObject, Clone)]
 pub struct User {
@@ -32,6 +37,13 @@ pub struct QueryRoot;
 
 #[Object]
 impl QueryRoot {
+    async fn db_users(&self, ctx: &Context<'_>) -> Result<Vec<DBUser>, Error> {
+        let pool = ctx.data::<PgPool>()?;
+        let users = sqlx::query_as::<_, DBUser>("SELECT * FROM users")
+            .fetch_all(pool)
+            .await?;
+        Ok(users)
+    }
 
     async fn all_users(&self) -> Vec<User> {
         let users = USERS.lock().unwrap();
@@ -45,14 +57,17 @@ impl QueryRoot {
 
     async fn search_users(&self, input: UserSearchInput) -> Vec<User> {
         let users = USERS.lock().unwrap();
-        users.to_vec()
-        .into_iter()
-        .filter(|user| {
-            input.name.as_ref().map_or(true, |n| user.name.to_lowercase().contains(&n.to_lowercase())) &&
-            input.email.as_ref().map_or(true, |e| user.email.to_lowercase().contains(&e.to_lowercase())) &&
-            input.age.as_ref().map_or(true, |a| user.age >= *a)
-        })
-        .collect()
+        users
+            .to_vec()
+            .into_iter()
+            .filter(|user| {
+                input.name.as_ref().map_or(true, |n| {
+                    user.name.to_lowercase().contains(&n.to_lowercase())
+                }) && input.email.as_ref().map_or(true, |e| {
+                    user.email.to_lowercase().contains(&e.to_lowercase())
+                }) && input.age.as_ref().map_or(true, |a| user.age >= *a)
+            })
+            .collect()
     }
 }
 
@@ -73,8 +88,13 @@ impl MutationRoot {
         user
     }
 
-    async fn update_user(&self, id: i32, name: Option<String>, 
-        email: Option<String>, age: Option<u8>) -> Result<User, Error> {
+    async fn update_user(
+        &self,
+        id: i32,
+        name: Option<String>,
+        email: Option<String>,
+        age: Option<u8>,
+    ) -> Result<User, Error> {
         let mut users = USERS.lock().unwrap();
         if let Some(user) = users.iter_mut().find(|user| user.id == id) {
             if let Some(new_name) = name {
@@ -108,6 +128,11 @@ impl MutationRoot {
 
 pub type MySchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 
-pub fn create_schema() -> MySchema {
-    Schema::build(QueryRoot, MutationRoot, EmptySubscription).finish()
+pub fn create_schema(pool:PgPool) -> MySchema {
+    Schema::build(
+        QueryRoot, 
+        MutationRoot, 
+        EmptySubscription)
+        .data(pool.clone())
+        .finish()
 }

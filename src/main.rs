@@ -1,8 +1,14 @@
 mod schema;
+mod models;
+
 use actix_web::{web, App, HttpRequest, HttpServer};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
-use async_graphql::http::GraphiQLSource;
+use async_graphql::{http::GraphiQLSource, Schema};
 use schema::{create_schema, MySchema};
+
+use dotenvy::dotenv;
+use sqlx::PgPool;
+use std::env;
 
 async fn graphql_handler(
     schema: web::Data<MySchema>,
@@ -19,7 +25,14 @@ async fn graphql_playground() -> actix_web::Result<actix_web::HttpResponse> {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let schema = create_schema();
+    dotenv().ok();
+
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let db_pool = PgPool::connect(&database_url).await.expect("Failed to connect to the database");
+
+    println!("✅ Connected to PostgreSQL!");
+
+    let schema = create_schema(db_pool);
 
     println!("🚀 GraphQL server running at http://localhost:8080/graphql");
 
