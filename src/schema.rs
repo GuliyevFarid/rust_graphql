@@ -1,7 +1,6 @@
-use crate::models::DBUser;
+use crate::{errors::UserError, models::DBUser};
 use async_graphql::{
-    Context, EmptySubscription, Error, ErrorExtensions, 
-    InputObject, Object, Schema, SimpleObject
+    Context, EmptySubscription, Error, ErrorExtensions, InputObject, Object, Schema, SimpleObject,
 };
 use lazy_static::lazy_static;
 use sqlx::PgPool;
@@ -38,11 +37,25 @@ pub struct QueryRoot;
 #[Object]
 impl QueryRoot {
     async fn db_users(&self, ctx: &Context<'_>) -> Result<Vec<DBUser>, Error> {
-        let pool = ctx.data::<PgPool>()?;
+        let pool = ctx
+            .data::<PgPool>()
+            .map_err(|_| UserError::DatabaseError("Failed to get DB pool".to_string()))?;
         let users = sqlx::query_as::<_, DBUser>("SELECT * FROM users")
             .fetch_all(pool)
             .await?;
         Ok(users)
+    }
+
+    async fn db_user_by_id(&self, ctx: &Context<'_>, id: i32) -> Result<DBUser, Error> {
+        let pool = ctx
+            .data::<PgPool>()
+            .map_err(|_| UserError::DatabaseError("Failed to get DB pool".to_string()))?;
+        let user = sqlx::query_as!(DBUser, "SELECT * FROM users WHERE id = $1", id)
+            .fetch_optional(pool)
+            .await
+            .map_err(UserError::from)?;
+
+        user.ok_or_else(|| UserError::NotFound.into())
     }
 
     async fn all_users(&self) -> Vec<User> {
@@ -128,11 +141,8 @@ impl MutationRoot {
 
 pub type MySchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 
-pub fn create_schema(pool:PgPool) -> MySchema {
-    Schema::build(
-        QueryRoot, 
-        MutationRoot, 
-        EmptySubscription)
+pub fn create_schema(pool: PgPool) -> MySchema {
+    Schema::build(QueryRoot, MutationRoot, EmptySubscription)
         .data(pool.clone())
         .finish()
 }
